@@ -62,10 +62,9 @@ stock-price-predictor/
 1.Clone the repository
 
 Bash
-git clone https://github.com/your-username/stock-price-predictor.git
+git clone (https://github.com/Irfan-Khan-dell/Python-project.git)
 
 2.Navigate to the project directory
-
 Bash
 cd stock-price-predictor
 
