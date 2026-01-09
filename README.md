@@ -2,9 +2,10 @@
 Projects for BCA DATA SCIENCE
 
 Name Irfan Khan
+     And Devraj Singh
 Class BCA V SEM
 COURSE DATA SCIENCE
-
+Group code: ID
 PROJECT NAME: STOCK PRICE PREDICTOR
 
 
