@@ -1,3 +1,7 @@
+Deploy="https://python-project-stockpredictor.streamlit.app"
+
+
+
 # Python-project
 Projects for BCA DATA SCIENCE
 
