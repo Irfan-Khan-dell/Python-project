@@ -1,89 +1,98 @@
 import yfinance as yf
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-import joblib
 import numpy as np
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import mean_absolute_error, r2_score
+import joblib
 from datetime import date
 import os
+import logging
 
-# Create directory for models if it doesn't exist
+# Configure professional logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 if not os.path.exists('models'):
     os.makedirs('models')
 
-def engineer_features(df, ticker):
-    """
-    Creates technical indicators based on PAST data only.
-    """
+def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Creates technical indicators based on past data."""
     df = df.copy()
-    
-    # Ensure simple column names (removes MultiIndex if present)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] for col in df.columns]
     
-    # Calculate Technical Indicators
     # 1. Moving Averages
     df['SMA_10'] = df['Close'].rolling(window=10).mean()
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
     
-    # 2. Daily Return (Momentum)
+    # 2. Momentum & Volatility
     df['Daily_Return'] = df['Close'].pct_change()
-    
-    # 3. Lagged Features (What happened yesterday?)
-    df['Lag_1'] = df['Close'].shift(1)
-    df['Lag_5'] = df['Close'].shift(5)
-    
-    # 4. Volatility (High - Low)
     df['Volatility'] = df['High'] - df['Low']
     
-    # Drop NaN values created by rolling/shifting
-    df.dropna(inplace=True)
+    # 3. Relative Strength Index (RSI - 14 Day)
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI_14'] = 100 - (100 / (1 + rs))
     
+    # 4. MACD
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    
+    # 5. Lagged Features
+    df['Lag_1_Return'] = df['Daily_Return'].shift(1)
+    df['Lag_5_Return'] = df['Daily_Return'].shift(5)
+    
+    df.dropna(inplace=True)
     return df
 
 stock_tickers = ['AAPL', 'GOOGL', 'KO', 'MSFT', 'NKE']
 start_date = '2020-01-01'
 end_date = date.today().strftime('%Y-%m-%d')
 
-print("Starting model training (Target: Next Day's Close)...")
+logging.info("Starting model training (Target: Next Day's % Return)...")
 
 for ticker in stock_tickers:
-    print(f"\nProcessing {ticker}...")
-    
-    # Download Data
+    logging.info(f"Processing {ticker}...")
     data = yf.download(ticker, start=start_date, end=end_date, progress=False)
     
-    if len(data) < 100:
-        print(f"Not enough data for {ticker}. Skipping.")
+    if len(data) < 150:
+        logging.warning(f"Not enough data for {ticker}. Skipping.")
         continue
 
-    # 1. Engineer Features (X)
-    df_features = engineer_features(data, ticker)
+    # Engineer Features
+    df_features = engineer_features(data)
     
-    # 2. Create Target (y) - SHIFT BACKWARDS by 1
-    # We want features at row 't' to predict Close at row 't+1'
-    df_features['Target_Next_Close'] = df_features['Close'].shift(-1)
-    
-    # Drop the very last row because it has no 'Target_Next_Close' (we don't know tomorrow yet)
+    # Target: Predict the NEXT DAY'S PERCENTAGE RETURN
+    df_features['Target_Next_Return'] = df_features['Close'].pct_change().shift(-1)
     df_model = df_features.dropna()
     
-    # Define Predictors (X) and Target (y)
-    predictors = ['Open', 'High', 'Low', 'Close', 'Volume', 'SMA_10', 'SMA_50', 'Daily_Return', 'Lag_1', 'Lag_5', 'Volatility']
+    # Define Predictors
+    predictors = ['Open', 'High', 'Low', 'Close', 'Volume', 'SMA_10', 'SMA_50', 
+                  'Daily_Return', 'Volatility', 'RSI_14', 'MACD', 'Signal_Line', 
+                  'Lag_1_Return', 'Lag_5_Return']
+    
     X = df_model[predictors]
-    y = df_model['Target_Next_Close']
+    y = df_model['Target_Next_Return']
     
-    # Split Data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+    # Professional Time-Series Split (Never shuffle time-series data)
+    tscv = TimeSeriesSplit(n_splits=5)
+    for train_index, test_index in tscv.split(X):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
     
-    # Train Model
-    model = RandomForestRegressor(n_estimators=100, min_samples_split=10, random_state=42, n_jobs=-1)
+    # Train Gradient Boosting Model
+    model = GradientBoostingRegressor(n_estimators=150, learning_rate=0.05, max_depth=4, random_state=42)
     model.fit(X_train, y_train)
     
     # Evaluate
-    score = model.score(X_test, y_test)
-    print(f"  > R^2 Score: {score:.4f}")
+    predictions = model.predict(X_test)
+    mae = mean_absolute_error(y_test, predictions)
+    logging.info(f"  > Mean Absolute Error (Return %): {mae:.5f}")
     
-    # Save
     joblib.dump(model, f'models/model_{ticker.lower()}.joblib')
 
-print("\nAll models trained and saved in 'models/' folder.")
+logging.info("All models trained and saved in 'models/' folder.")
