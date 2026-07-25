@@ -1,16 +1,7 @@
-Deploy="https://python-project-stockpredictor.streamlit.app"
-
-
-
-# Python-project
-Projects for BCA DATA SCIENCE
-
-Name Irfan Khan
-     And Devraj Singh
-Class BCA V SEM
-COURSE DATA SCIENCE
-Group code: ID
 PROJECT NAME: STOCK PRICE PREDICTOR
+
+<img width="1907" height="530" alt="Screenshot 2026-07-25 122953" src="https://github.com/user-attachments/assets/8a6f8acf-aa32-4f36-9b21-e83cdda21ded" />
+<img width="1868" height="798" alt="Screenshot 2026-07-25 123012" src="https://github.com/user-attachments/assets/ae6db4c5-9130-4753-8a48-6ddceb4fc4b2" />
 
 
 
